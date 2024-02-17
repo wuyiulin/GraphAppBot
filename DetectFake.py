@@ -75,9 +75,10 @@ def dotMask(block, mask, dict, N):
     DCT = np.zeros((N,N), dtype=np.float32)
     for i in range(N):
         for j in range(N):
-            # pdb.set_trace()
-            DCT[i, j] = np.sum(np.dot(block, mask[i, j]))
+            DCT[i, j] = np.sum(block * mask[i, j]*100)
             strDij = str(abs(DCT[i,j]))[0]
+            # print("i: " + str(i) + ", j: " + str(j))
+            # pdb.set_trace()
             
             if(strDij!='0'):
                 dict[strDij]+=1
@@ -228,12 +229,18 @@ def SingleTransform(img):
     # 計算結果
     result = 0
     SumValue = img.shape[0] * img.shape[1]
+    TotalNum = sum(dict.values())
     print("Single Dict:")
     print(dict)
     print("Single SumValue: "+ str(SumValue))
+    print("Single TotalNum: "+ str(TotalNum))
     for key in dict:
         dict[key] /= SumValue
-        result += abs(BenfordsDict[key] - dict[key])
+        result += abs(BenfordsDict[key] - dict[key]) * (1 / BenfordsDict[key])
+    print("BenfordsDict: ")
+    print(BenfordsDict)
+    print("OurDict: ")
+    print(dict)
     
     return result
 
@@ -291,13 +298,14 @@ def MultiTransform(img, cores=None):
 if __name__ == '__main__':
 
     image = cv2.imread('./Head.jpg', cv2.IMREAD_GRAYSCALE)
+    # image = cv2.resize(image, (512, 512), interpolation=cv2.INTER_NEAREST)
     # resultO = oldSingleTransform(image)
-    resultS = OpenCVSingleTransform(image)
+    # resultS = OpenCVSingleTransform(image)
     resultF = SingleTransform(image)
     # resultM = MultiTransform(image)
 
     # print("這張照片的修圖程度(單執行緒)： " + str('{:.3f}'.format(resultO)) +"\n")
-    print("這張照片的修圖程度(單執行緒)： " + str('{:.3f}'.format(resultS)) +"\n")
+    # print("這張照片的修圖程度(單執行緒)： " + str('{:.3f}'.format(resultS)) +"\n")
     print("這張照片的修圖程度(單執行緒)： " + str('{:.3f}'.format(resultF)) +"\n")
     # print("這張照片的修圖程度(多執行緒)： " + str('{:.3f}'.format(resultM)) +"\n")
 
