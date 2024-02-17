@@ -278,9 +278,9 @@ def MultiTransform(img, cores=None):
 if __name__ == '__main__':
 
     image = cv2.imread('./Head.jpg', cv2.IMREAD_GRAYSCALE)
-    resultO = oldSingleTransform(image)
+    # resultO = oldSingleTransform(image)
     # resultS = numpySingleTransform(image)
-    resultF = SingleTransform(image)
+    # resultF = SingleTransform(image)
     # resultM = MultiTransform(image)
 
     # print("這張照片的修圖程度(單執行緒)： " + str('{:.3f}'.format(resultO)) +"\n")
