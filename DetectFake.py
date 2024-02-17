@@ -7,6 +7,7 @@ from tqdm import tqdm
 from functools import partial
 from scipy.stats import chisquare
 import numpy as np
+from scipy.fftpack import dct
 import pdb
 
 def timeViewer(func):
@@ -18,12 +19,11 @@ def timeViewer(func):
         return result
     return inner
 
-def numpyDCT(block, dict, N):
-    block = np.float32(block)
-    dct = cv2.dct(block)
+def OpenCVDCT(block, dict, N):
+    block = cv2.dct(block)
     for i in range(N):
         for j in range(N):
-            strDij = str(abs(dct[i,j]))[0]
+            strDij = str(abs(block[i,j]))[0]
             if(strDij!='0'):
                 dict[strDij]+=1
 
@@ -50,7 +50,7 @@ def oldDCT(block, dict, N):
                 dict[strDij]+=1
 
 def genrateDCTmask(N):
-    mask = np.zeros((N, N), dtype=np.float32)
+    mask = np.zeros((N, N, N, N), dtype=np.float32)
     para = 1/(2*np.sqrt(2*N))
     OrthogonalValue = 1/np.sqrt(2)
     for i in range(N):
@@ -66,8 +66,23 @@ def genrateDCTmask(N):
 
             for x in range(N):
                 for y in range(N):
-                    mask[i,j] += para * Ci * Cj * np.cos((2*x+1)*i*np.pi / (2*N)) * np.cos((2*y+1)*j*np.pi / (2*N))
+                    mask[i, j, x, y] = (para * Ci * Cj * np.cos((2*x+1)*i*np.pi / (2*N)) * np.cos((2*y+1)*j*np.pi / (2*N)))
+                    # print("Now i j x y:" + str(i) + " " + str(j) + " " + str(x) + " " + str(y) + " ")
+                    # pdb.set_trace()
     return mask
+
+def dotMask(block, mask, dict, N):
+    DCT = np.zeros((N,N), dtype=np.float32)
+    for i in range(N):
+        for j in range(N):
+            # pdb.set_trace()
+            DCT[i, j] = np.sum(np.dot(block, mask[i, j]))
+            strDij = str(abs(DCT[i,j]))[0]
+            
+            if(strDij!='0'):
+                dict[strDij]+=1
+    # pdb.set_trace()
+
 
 def MutiDCT(shared_data, DCTmask, block, lock, N):
     Sdata = np.frombuffer(shared_data.get_obj(), dtype=np.float32)
@@ -85,11 +100,13 @@ def MutiDCT(shared_data, DCTmask, block, lock, N):
         Sdata += localArr
 
     
+def dct2(a):
+    return dct(dct(a.T, norm='ortho').T, norm='ortho')
+
 
 
 @timeViewer
 def oldSingleTransform(img):
-    print("w/o Mask method.")
     # 初始化圖片的首位字典
     manager = multiprocessing.Manager()
     dict = manager.dict({str(i): 0 for i in range(1, 10)})
@@ -131,8 +148,7 @@ def oldSingleTransform(img):
 
 
 @timeViewer
-def numpySingleTransform(img):
-
+def OpenCVSingleTransform(img):
     # 初始化圖片的首位字典
     manager = multiprocessing.Manager()
     dict = manager.dict({str(i): 0 for i in range(1, 10)})
@@ -157,7 +173,7 @@ def numpySingleTransform(img):
     times = len(blocks)
     progress = tqdm(total=times)
     for block in blocks:
-        numpyDCT(block, dict, N)
+        OpenCVDCT(block, dict, N)
         progress.update(1)
 
     # 計算結果
@@ -175,7 +191,6 @@ def numpySingleTransform(img):
 
 @timeViewer
 def SingleTransform(img):
-    print("w Mask method.")
     # 初始化圖片的首位字典
     manager = multiprocessing.Manager()
     dict = manager.dict({str(i): 0 for i in range(1, 10)})
@@ -204,20 +219,18 @@ def SingleTransform(img):
     progress = tqdm(total=times)
     
     for block in blocks:
-        block = np.dot(block, DCTmask)
-        for i in range(N):
-            for j in range(N):            
-                strDij = str(abs(block[i,j]))[0]
-                if(strDij!='0'):
-                    dict[strDij]+=1
+        # block = np.dot(block, DCTmask)
+        # block = dct2(block)
+        # pdb.set_trace()
+        dotMask(block, DCTmask, dict, N)
         progress.update(1)
 
     # 計算結果
     result = 0
     SumValue = img.shape[0] * img.shape[1]
-    # print("Single Dict:")
-    # print(dict)
-    # print("Single SumValue: "+ str(SumValue))
+    print("Single Dict:")
+    print(dict)
+    print("Single SumValue: "+ str(SumValue))
     for key in dict:
         dict[key] /= SumValue
         result += abs(BenfordsDict[key] - dict[key])
@@ -228,9 +241,9 @@ def SingleTransform(img):
 @timeViewer
 def MultiTransform(img, cores=None):
     # 如果沒有指定核心數，則查詢電腦可用的核心數並設定。
-    # if(cores==None):
-    #     ratio = 0.8
-    #     num_cores = int(multiprocessing.cpu_count()*ratio)
+    if(cores==None):
+        ratio = 0.8
+        num_cores = int(multiprocessing.cpu_count()*ratio)
 
     # 設定區塊大小
     N = 8
@@ -279,13 +292,13 @@ if __name__ == '__main__':
 
     image = cv2.imread('./Head.jpg', cv2.IMREAD_GRAYSCALE)
     # resultO = oldSingleTransform(image)
-    # resultS = numpySingleTransform(image)
-    # resultF = SingleTransform(image)
+    resultS = OpenCVSingleTransform(image)
+    resultF = SingleTransform(image)
     # resultM = MultiTransform(image)
 
     # print("這張照片的修圖程度(單執行緒)： " + str('{:.3f}'.format(resultO)) +"\n")
-    # print("這張照片的修圖程度(單執行緒)： " + str('{:.3f}'.format(resultS)) +"\n")
-    # print("這張照片的修圖程度(單執行緒)： " + str('{:.3f}'.format(resultF)) +"\n")
+    print("這張照片的修圖程度(單執行緒)： " + str('{:.3f}'.format(resultS)) +"\n")
+    print("這張照片的修圖程度(單執行緒)： " + str('{:.3f}'.format(resultF)) +"\n")
     # print("這張照片的修圖程度(多執行緒)： " + str('{:.3f}'.format(resultM)) +"\n")
 
 

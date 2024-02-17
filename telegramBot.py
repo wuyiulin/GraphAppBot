@@ -3,7 +3,7 @@ from telegram import ForceReply, Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 import configparser
 import time
-from DetectFake import MultiTransform, SingleTransform
+from DetectFake import MultiTransform, SingleTransform, OpenCVSingleTransform
 import cv2
 
 config = configparser.ConfigParser()
@@ -54,7 +54,8 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 傳入辨識程式
     start = time.time()
     # result = MultiTransform(image)
-    result = SingleTransform(image)
+    # result = SingleTransform(image)
+    result = OpenCVSingleTransform(image)
     result = str('{:.3f}'.format(result))
     end = time.time()
     useTime = end - start
