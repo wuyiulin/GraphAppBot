@@ -228,9 +228,9 @@ def SingleTransform(img):
 @timeViewer
 def MultiTransform(img, cores=None):
     # 如果沒有指定核心數，則查詢電腦可用的核心數並設定。
-    if(cores==None):
-        ratio = 0.8
-        num_cores = int(multiprocessing.cpu_count()*ratio)
+    # if(cores==None):
+    #     ratio = 0.8
+    #     num_cores = int(multiprocessing.cpu_count()*ratio)
 
     # 設定區塊大小
     N = 8
