@@ -1,5 +1,6 @@
 import os
 import multiprocessing
+from concurrent.futures import ProcessPoolExecutor
 import time
 import cv2
 import numpy as np
@@ -86,9 +87,9 @@ def dotMask(block, mask, dict, N):
     # pdb.set_trace()
 
 
-def MutiDCT(Sdata, mask, block, N, lock):
+def MutiDCT(args):
+    mask, block, N = args
     localArr = np.zeros(9, dtype=np.float32)
-    np_data = np.frombuffer(Sdata.get_obj(), dtype=np.float32)
     DCT = np.zeros((N,N), dtype=np.float32)
     
     for i in range(N):
@@ -98,8 +99,8 @@ def MutiDCT(Sdata, mask, block, N, lock):
             if strDij != '0':
                 Dij = int(strDij)
                 localArr[Dij-1] += 1
-    with lock:
-        np_data += localArr
+
+    return localArr
 
     
 def dct2(a):
@@ -259,47 +260,25 @@ def MultiTransform(img, cores=None):
     N = 8
     blocks = [np.float32(img[i:i+N, j:j+N]-128) for i in range(0, img.shape[0], N) for j in range(0, img.shape[1], N)]
 
-    shared_data = multiprocessing.Array('f', 9)
     BenfordsArray = np.array([np.log10((i+1)/i) for i in range(1, 10)])
 
     DCTmask = genrateDCTmask(N)
-    lock = multiprocessing.Lock()
-    processes = []
-    num_processes = len(blocks)
-    progress = tqdm(total=num_processes)
-    blocks = np.array(blocks)
+    progress = tqdm(total=len(blocks))
+    
+    with ProcessPoolExecutor(max_workers=num_cores) as executor:
+        results = executor.map(MutiDCT, ((DCTmask, block, N) for block in blocks))
+        result_data = np.zeros(9)
+        for localArr in results:
+            result_data += localArr
+            progress.update(1)
 
-    for block in blocks:
-        # pdb.set_trace()
-        p = multiprocessing.Process(target=MutiDCT, args=(shared_data, DCTmask, block, N, lock))
-        processes.append(p)
-        progress.update(1)
-        p.start()
-        
-
-    for p in processes:
-        p.join()
-
-        
-
-    result = 0
     SumValue = img.shape[0] * img.shape[1]
-    SumValue_array = np.full(len(shared_data), SumValue)
-    result_data = np.array(shared_data) / SumValue_array
+    SumValue_array = np.full(len(result_data), SumValue)
+    result_data = result_data / SumValue_array
     for i in range(len(result_data)):
         result_data[i] = abs(result_data[i] - BenfordsArray[i]) * (1 / BenfordsArray[i])
-        result += result_data[i]
-    # print("SumValue: " + str(SumValue))
-    # # print("shared_data:")
-    # # for i in range(len(shared_data)):
-    # #     print("shared_data[" + str(i) + "]" + str(shared_data[i]))
-    # print("BenfordsArray):")
-    # print(BenfordsArray)
-    # print("result_data:")
-    # print(result_data)
 
-    return result
-
+    return np.sum(result_data)
 
 
 
