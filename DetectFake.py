@@ -8,6 +8,7 @@ from functools import partial
 from scipy.stats import chisquare
 import numpy as np
 from scipy.fftpack import dct
+from queue import Queue
 import pdb
 
 def timeViewer(func):
@@ -20,7 +21,7 @@ def timeViewer(func):
     return inner
 
 def OpenCVDCT(block, dict, N):
-    block = cv2.dct(block)
+    block = cv2.dct(block*100)
     for i in range(N):
         for j in range(N):
             strDij = str(abs(block[i,j]))[0]
@@ -85,20 +86,20 @@ def dotMask(block, mask, dict, N):
     # pdb.set_trace()
 
 
-def MutiDCT(shared_data, DCTmask, block, lock, N):
-    Sdata = np.frombuffer(shared_data.get_obj(), dtype=np.float32)
+def MutiDCT(Sdata, mask, block, N, lock):
     localArr = np.zeros(9, dtype=np.float32)
-    DCT = np.dot(DCTmask, block)
-
+    np_data = np.frombuffer(Sdata.get_obj(), dtype=np.float32)
+    DCT = np.zeros((N,N), dtype=np.float32)
+    
     for i in range(N):
         for j in range(N):
+            DCT[i, j] = np.sum(block * mask[i, j]*100)
             strDij = str(abs(DCT[i,j]))[0]
-            if(strDij!='0'):
+            if strDij != '0':
                 Dij = int(strDij)
-                localArr[Dij-1]+=1
-
+                localArr[Dij-1] += 1
     with lock:
-        Sdata += localArr
+        np_data += localArr
 
     
 def dct2(a):
@@ -185,8 +186,12 @@ def OpenCVSingleTransform(img):
     print("Single SumValue: "+ str(SumValue))
     for key in dict:
         dict[key] /= SumValue
-        result += abs(BenfordsDict[key] - dict[key])
-    
+        result += abs(BenfordsDict[key] - dict[key]) * (1 / BenfordsDict[key])
+    print("BenfordsDict: ")
+    print(BenfordsDict)
+    print("OurDict: ")
+    print(dict)
+
     return result
 
 
@@ -230,65 +235,68 @@ def SingleTransform(img):
     result = 0
     SumValue = img.shape[0] * img.shape[1]
     TotalNum = sum(dict.values())
-    print("Single Dict:")
-    print(dict)
-    print("Single SumValue: "+ str(SumValue))
-    print("Single TotalNum: "+ str(TotalNum))
+    # print("Single Dict:")
+    # print(dict)
+    # print("Single SumValue: "+ str(SumValue))
+    # print("Single TotalNum: "+ str(TotalNum))
     for key in dict:
         dict[key] /= SumValue
         result += abs(BenfordsDict[key] - dict[key]) * (1 / BenfordsDict[key])
-    print("BenfordsDict: ")
-    print(BenfordsDict)
-    print("OurDict: ")
-    print(dict)
+    # print("BenfordsDict: ")
+    # print(BenfordsDict)
+    # print("OurDict: ")
+    # print(dict)
     
     return result
 
 
 @timeViewer
 def MultiTransform(img, cores=None):
-    # 如果沒有指定核心數，則查詢電腦可用的核心數並設定。
-    if(cores==None):
+    if cores is None:
         ratio = 0.8
-        num_cores = int(multiprocessing.cpu_count()*ratio)
+        num_cores = int(multiprocessing.cpu_count() * ratio)
 
-    # 設定區塊大小
     N = 8
-
-    # 將圖像分成 8x8 的區塊
     blocks = [np.float32(img[i:i+N, j:j+N]-128) for i in range(0, img.shape[0], N) for j in range(0, img.shape[1], N)]
 
-    # 宣告共享的記憶體
-    shared_data = multiprocessing.Array('i', 9)
-    for i in range(len(shared_data)):
-        shared_data[i] = 0  # 初始化所有值為0
-
-    # 初始化 Benford's Law 的標準 Array
+    shared_data = multiprocessing.Array('f', 9)
     BenfordsArray = np.array([np.log10((i+1)/i) for i in range(1, 10)])
 
-    # 多 process 處理 DCT 運算
     DCTmask = genrateDCTmask(N)
     lock = multiprocessing.Lock()
     processes = []
     num_processes = len(blocks)
     progress = tqdm(total=num_processes)
+    blocks = np.array(blocks)
+
     for block in blocks:
-        p = multiprocessing.Process(target=MutiDCT, args=(shared_data, DCTmask, block, lock, N))
+        # pdb.set_trace()
+        p = multiprocessing.Process(target=MutiDCT, args=(shared_data, DCTmask, block, N, lock))
         processes.append(p)
-        p.start()
         progress.update(1)
+        p.start()
+        
 
     for p in processes:
         p.join()
-    
-    # 計算結果
+
+        
+
     result = 0
-    SumValue = np.sum(shared_data)
-    result_data = shared_data / SumValue
-    result_data = abs(result_data - BenfordsArray)
-    result = np.sum(result_data)
-    print("SumValue: " + str(SumValue))
-    print(shared_data)
+    SumValue = img.shape[0] * img.shape[1]
+    SumValue_array = np.full(len(shared_data), SumValue)
+    result_data = np.array(shared_data) / SumValue_array
+    for i in range(len(result_data)):
+        result_data[i] = abs(result_data[i] - BenfordsArray[i]) * (1 / BenfordsArray[i])
+        result += result_data[i]
+    # print("SumValue: " + str(SumValue))
+    # # print("shared_data:")
+    # # for i in range(len(shared_data)):
+    # #     print("shared_data[" + str(i) + "]" + str(shared_data[i]))
+    # print("BenfordsArray):")
+    # print(BenfordsArray)
+    # print("result_data:")
+    # print(result_data)
 
     return result
 
@@ -302,12 +310,12 @@ if __name__ == '__main__':
     # resultO = oldSingleTransform(image)
     # resultS = OpenCVSingleTransform(image)
     resultF = SingleTransform(image)
-    # resultM = MultiTransform(image)
+    resultM = MultiTransform(image)
 
     # print("這張照片的修圖程度(單執行緒)： " + str('{:.3f}'.format(resultO)) +"\n")
     # print("這張照片的修圖程度(單執行緒)： " + str('{:.3f}'.format(resultS)) +"\n")
     print("這張照片的修圖程度(單執行緒)： " + str('{:.3f}'.format(resultF)) +"\n")
-    # print("這張照片的修圖程度(多執行緒)： " + str('{:.3f}'.format(resultM)) +"\n")
+    print("這張照片的修圖程度(多執行緒)： " + str('{:.3f}'.format(resultM)) +"\n")
 
 
 
