@@ -50,17 +50,25 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # 讀取圖片
     image = cv2.imread(fileName, cv2.IMREAD_GRAYSCALE)
+    image = cv2.resize(image, (512, 512), interpolation=cv2.INTER_NEAREST)
+
+    ref = 0
+    if(image.shape == (512,512)):
+        ref = 0.4
+    else:
+        ref = 1
     
     # 傳入辨識程式
     start = time.time()
-    # result = MultiTransform(image)
+    result = MultiTransform(image)
     # result = SingleTransform(image)
-    result = OpenCVSingleTransform(image)
+    # result = OpenCVSingleTransform(image)
     result = str('{:.3f}'.format(result))
     end = time.time()
     useTime = end - start
     useTime = str('{:.3f}'.format(useTime))
-    await update.message.reply_text('處理時間: ' + useTime +"s\n" + '修圖程度: ' + result +"\n" + "數字越大代表修得越大，大於 0.6 應該就是有修。")
+    await update.message.reply_text('處理時間: {}s\n修圖程度: {}\n數字越大代表修得越大，大於 {} 應該就是有修。'.format(useTime, result, ref))
+
 
 
 
@@ -74,7 +82,6 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
 
     # on non command i.e message - echo the message on Telegram
-    # application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
     application.add_handler(MessageHandler(filters.PHOTO, handle_image))
     # Run the bot until the user presses Ctrl-C
     application.run_polling(allowed_updates=Update.ALL_TYPES)
