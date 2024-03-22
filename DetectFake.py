@@ -10,6 +10,7 @@ from scipy.stats import chisquare
 import numpy as np
 from scipy.fftpack import dct
 from queue import Queue
+import ctypes
 import pdb
 
 def timeViewer(func):
@@ -17,7 +18,7 @@ def timeViewer(func):
         start = time.time()
         result = func(*args, **kwargs)
         end = time.time()
-        print("This Process use " + str('{:.3f}'.format(end - start)) + "s")
+        print("Function '{}' took {:.3f} seconds".format(func.__name__, end - start))
         return result
     return inner
 
@@ -244,7 +245,6 @@ def SingleTransform(img):
     # 計算結果
     result = 0
     SumValue = img.shape[0] * img.shape[1]
-    TotalNum = sum(dict.values())
     # print("Single Dict:")
     # print(dict)
     # print("Single SumValue: "+ str(SumValue))
@@ -289,21 +289,39 @@ def MultiTransform(img, cores=None):
 
     return np.sum(result_data)
 
+@timeViewer
+def SingleCTransform(imgPath):
 
+    # Load C++ library
+    lib = ctypes.cdll.LoadLibrary('./Detectlib/DetectFake.so')
+    lib.DetectC.argtypes = [ctypes.c_char_p]
+    lib.DetectC.restype = ctypes.c_float
+
+
+    # Call C++ function
+    c_imgPath = ctypes.c_char_p(imgPath.encode('utf-8'))
+
+    result = lib.DetectC(c_imgPath)
+    
+    return result
+    
 
 if __name__ == '__main__':
 
+    path = '/home/franky/Data/Lab/Project/SourceCode/GraphAppBot/Head.jpg'
     image = cv2.imread('./Head.jpg', cv2.IMREAD_GRAYSCALE)
-    # image = cv2.resize(image, (512, 512), interpolation=cv2.INTER_NEAREST)
+    image = cv2.resize(image, (512, 512), interpolation=cv2.INTER_NEAREST)
+
     resultO = oldSingleTransform(image)
     resultS = OpenCVSingleTransform(image)
     resultF = SingleTransform(image)
     resultM = MultiTransform(image)
+    resultC = SingleCTransform(path)
 
     print("這張照片的修圖程度(單執行緒 土法煉鋼 Method)： " + str('{:.3f}'.format(resultO)) +"\n")
     print("這張照片的修圖程度(單執行緒 OpenCV  Method)： " + str('{:.3f}'.format(resultS)) +"\n")
     print("這張照片的修圖程度(單執行緒 Mask    Method)： " + str('{:.3f}'.format(resultF)) +"\n")
     print("這張照片的修圖程度(多執行緒 Mask    Method)： " + str('{:.3f}'.format(resultM)) +"\n")
-
+    print("這張照片的修圖程度(單執行緒 CPP    Method)： " + str('{:.3f}'.format(resultC)) +"\n")
 
 

@@ -3,8 +3,10 @@ from telegram import ForceReply, Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 import configparser
 import time
-from DetectFake import MultiTransform, SingleTransform, OpenCVSingleTransform
+from DetectFake import MultiTransform, SingleTransform, OpenCVSingleTransform, SingleCTransform
 import cv2
+import datetime
+import pdb
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -41,8 +43,14 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 從 Bot API 獲取文件對象
     photo_file = await update.message.photo[-1].get_file()
 
+    # 獲取當前的日期和時間
+    current_datetime = datetime.datetime.now()
+
+    # 將日期時間格式化為字符串
+    current_datetime_str = current_datetime.strftime("%Y-%m-%d %H:%M:%S")
+
     # 下載圖片
-    fileName = 'Photo/photo_.jpg'
+    fileName = 'Photo/photo_' + current_datetime_str + '.jpg'
     await photo_file.download_to_drive(fileName)
 
     # 回覆用戶收到圖片
