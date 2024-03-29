@@ -43,14 +43,8 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 從 Bot API 獲取文件對象
     photo_file = await update.message.photo[-1].get_file()
 
-    # 獲取當前的日期和時間
-    current_datetime = datetime.datetime.now()
-
-    # 將日期時間格式化為字符串
-    current_datetime_str = current_datetime.strftime("%Y-%m-%d %H:%M:%S")
-
     # 下載圖片
-    fileName = 'Photo/photo_' + current_datetime_str + '.jpg'
+    fileName = 'Photo/photo.jpg'
     await photo_file.download_to_drive(fileName)
 
     # 回覆用戶收到圖片
